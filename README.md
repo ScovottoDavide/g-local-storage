@@ -23,7 +23,7 @@ go
 ```golang
 import (
     "fmt"
-    "github.com/your-username/glocalstorage"
+    "github.com/ScovottoDavide/glocalstorage"
     "time"
 )
 
