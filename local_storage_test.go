@@ -23,7 +23,7 @@ func TestLocalStorageSet(t *testing.T) {
 	}
 
 	cache.Set("key1", []byte("1abcdefghilm"))
-	cache.ShowCache()
+	cache.Show()
 	if cache.head.key != "key1" {
 		t.Errorf("Head key is supposed to be key1, instead got %s\n", cache.head.key)
 	}
@@ -32,7 +32,7 @@ func TestLocalStorageSet(t *testing.T) {
 	}
 
 	cache.Set("key4", []byte("4abcdefghilm"))
-	cache.ShowCache()
+	cache.Show()
 	if cache.head.key != "key4" {
 		t.Errorf("Head key is supposed to be key1, instead got %s\n", cache.head.key)
 	}
@@ -75,7 +75,7 @@ func TestLocalStorageLRU(t *testing.T) {
 		t.Errorf("curSize should be 5, instead got %d\n", curSize)
 	}
 
-	cache.ShowCache()
+	cache.Show()
 }
 
 func TestCacheDelete(t *testing.T) {
@@ -103,7 +103,7 @@ func TestCacheDelete(t *testing.T) {
 		t.Errorf("curSize should be 3, instead got %d\n", curSize)
 	}
 
-	cache.ShowCache()
+	cache.Show()
 }
 
 func TestCacheClear(t *testing.T) {
@@ -124,5 +124,27 @@ func TestCacheClear(t *testing.T) {
 	if curSize != 0 {
 		t.Errorf("curSize should be 0, instead got %d\n", curSize)
 	}
-	cache.ShowCache()
+	cache.Show()
+}
+
+func TestCacheExpiration(t *testing.T) {
+	// set a low cache expiration time
+	storageExpiration := time.Duration(time.Second * 2)
+	var capacity int64 = 5
+
+	config := StorageConfig{Expiration: storageExpiration, Capacity: capacity}
+	cache := New(config)
+
+	cache.Set("key1", []byte("1abcdefg"))
+
+	// let cache value expire
+	t.Log("Sleeping for 5 seconds...")
+	time.Sleep(time.Second * 5)
+
+	// Try to GET key from cache. It should remove the expired key
+	value, hit := cache.Get("key1")
+	if value != nil && hit != false {
+		t.Errorf("Cache did not evict key key1.")
+	}
+	cache.Show()
 }

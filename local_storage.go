@@ -94,6 +94,7 @@ func (local_storage *LocalStorage) Get(key string) (value []byte, hit bool) {
 		return nil, false
 	} else if local_storage.isNodeExpired(newHead) {
 		local_storage.removeNode(newHead)
+		return nil, false
 	}
 
 	local_storage.updateHead(newHead)
@@ -123,7 +124,7 @@ func (local_storage *LocalStorage) Clear() {
 	}
 }
 
-func (local_storage *LocalStorage) ShowCache() {
+func (local_storage *LocalStorage) Show() {
 	for i := local_storage.head; i != nil; {
 		fmt.Println("Key: ", i.key)
 		fmt.Println("Value: ", string(i.value))
