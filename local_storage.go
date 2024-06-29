@@ -2,9 +2,15 @@ package glocalstorage
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
 )
+
+type backgroundCleaner struct {
+	Interval time.Duration
+	stop     chan bool
+}
 
 type node struct {
 	key        string
@@ -15,21 +21,27 @@ type node struct {
 }
 
 type StorageConfig struct {
-	Expiration time.Duration
-	Capacity   int64
+	Expiration      time.Duration
+	Capacity        int64
+	CleanupInterval time.Duration // if set > 0 will run a background storage cleaner
 }
 
-type LocalStorage struct {
+type InternalLocalStorage struct {
 	kv_storage     map[string]*node
 	head           *node
 	tail           *node
 	size           int64
 	defaultConfigs StorageConfig
 	lock           *sync.Mutex
+	cleaner        *backgroundCleaner
+}
+
+type LocalStorage struct {
+	*InternalLocalStorage
 }
 
 func New(config StorageConfig) *LocalStorage {
-	return &LocalStorage{
+	intLocalStorage := &InternalLocalStorage{
 		kv_storage:     make(map[string]*node),
 		head:           nil,
 		tail:           nil,
@@ -37,9 +49,49 @@ func New(config StorageConfig) *LocalStorage {
 		defaultConfigs: config,
 		lock:           &sync.Mutex{},
 	}
+	localStorage := &LocalStorage{InternalLocalStorage: intLocalStorage}
+
+	cleanupInterval := config.CleanupInterval
+
+	if cleanupInterval > 0 {
+		runCleaner(intLocalStorage, cleanupInterval)
+		runtime.SetFinalizer(localStorage, stopCleaner)
+	}
+
+	return localStorage
 }
 
-func (local_storage *LocalStorage) Set(key string, value []byte) (updated bool) {
+func runCleaner(intLocalStorage *InternalLocalStorage, cleanupInterval time.Duration) {
+	cleaner := &backgroundCleaner{
+		Interval: cleanupInterval,
+		stop:     make(chan bool),
+	}
+
+	intLocalStorage.cleaner = cleaner
+	go cleaner.Run(intLocalStorage)
+}
+
+func (cleaner *backgroundCleaner) Run(intLocalStorage *InternalLocalStorage) {
+	ticker := time.NewTicker(cleaner.Interval)
+	for {
+		select {
+		case <-ticker.C:
+			fmt.Println("STARTING Backgroung cleaner")
+			intLocalStorage.CleanUpExpired()
+		case <-cleaner.stop:
+			ticker.Stop()
+			fmt.Println("STOPPED Backgroung cleaner")
+			return
+		}
+	}
+}
+
+func stopCleaner(c *LocalStorage) {
+	fmt.Println("Stopping backgroung cleaner")
+	c.cleaner.stop <- true
+}
+
+func (local_storage *InternalLocalStorage) Set(key string, value []byte) (updated bool) {
 	local_storage.lock.Lock()
 	defer local_storage.lock.Unlock()
 
@@ -84,7 +136,7 @@ func (local_storage *LocalStorage) Set(key string, value []byte) (updated bool) 
 	}
 }
 
-func (local_storage *LocalStorage) Get(key string) (value []byte, hit bool) {
+func (local_storage *InternalLocalStorage) Get(key string) (value []byte, hit bool) {
 	local_storage.lock.Lock()
 	defer local_storage.lock.Unlock()
 
@@ -101,7 +153,7 @@ func (local_storage *LocalStorage) Get(key string) (value []byte, hit bool) {
 	return newHead.value, true
 }
 
-func (local_storage *LocalStorage) Delete(key string) bool {
+func (local_storage *InternalLocalStorage) Delete(key string) bool {
 	local_storage.lock.Lock()
 	defer local_storage.lock.Unlock()
 
@@ -114,7 +166,7 @@ func (local_storage *LocalStorage) Delete(key string) bool {
 	return true
 }
 
-func (local_storage *LocalStorage) Clear() {
+func (local_storage *InternalLocalStorage) Clear() {
 	local_storage.lock.Lock()
 	defer local_storage.lock.Unlock()
 
@@ -124,7 +176,7 @@ func (local_storage *LocalStorage) Clear() {
 	}
 }
 
-func (local_storage *LocalStorage) Show() {
+func (local_storage *InternalLocalStorage) Show() {
 	for i := local_storage.head; i != nil; {
 		fmt.Println("Key: ", i.key)
 		fmt.Println("Value: ", string(i.value))
@@ -134,7 +186,7 @@ func (local_storage *LocalStorage) Show() {
 }
 
 // LRU policy eviction
-func (local_storage *LocalStorage) evict() {
+func (local_storage *InternalLocalStorage) evict() {
 	to_evict := local_storage.tail
 	local_storage.tail = to_evict.prev
 	local_storage.tail.next = nil
@@ -145,7 +197,7 @@ func (local_storage *LocalStorage) evict() {
 	delete(local_storage.kv_storage, to_evict.key)
 }
 
-func (local_storage *LocalStorage) updateHead(newHead *node) {
+func (local_storage *InternalLocalStorage) updateHead(newHead *node) {
 	prev_ := newHead.prev
 	prev_.next = newHead.next
 	if prev_.next == nil {
@@ -157,11 +209,22 @@ func (local_storage *LocalStorage) updateHead(newHead *node) {
 	local_storage.head.next.prev = local_storage.head
 }
 
-func (local_storage *LocalStorage) isNodeExpired(node *node) bool {
+func (local_storage *InternalLocalStorage) CleanUpExpired() {
+	local_storage.lock.Lock()
+	defer local_storage.lock.Unlock()
+	for i := local_storage.head; i != nil; {
+		if local_storage.isNodeExpired(i) {
+			local_storage.removeNode(i)
+		}
+		i = i.next
+	}
+}
+
+func (local_storage *InternalLocalStorage) isNodeExpired(node *node) bool {
 	return node.expiration.Before(time.Now())
 }
 
-func (local_storage *LocalStorage) removeNode(nodeToRemove *node) {
+func (local_storage *InternalLocalStorage) removeNode(nodeToRemove *node) {
 	if nodeToRemove.prev == nil && nodeToRemove.next == nil { // last elem
 		local_storage.head = nil
 		local_storage.tail = nil

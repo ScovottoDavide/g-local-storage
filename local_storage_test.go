@@ -148,3 +148,42 @@ func TestCacheExpiration(t *testing.T) {
 	}
 	cache.Show()
 }
+
+func TestCacheWithCleaner(t *testing.T) {
+	storageExpiration := time.Duration(time.Second * 2)
+	cleanupInterval := time.Duration(time.Second * 1)
+	var capacity int64 = 5
+
+	config := StorageConfig{Expiration: storageExpiration, Capacity: capacity, CleanupInterval: cleanupInterval}
+	cache := New(config)
+
+	cache.Set("key1", []byte("ABCDEFG"))
+
+	<-time.After(time.Second * 3)
+
+	value, hit := cache.Get("key1")
+	if value != nil && hit != false {
+		t.Errorf("Background cleaner DID NOT remove expired nodes.")
+	}
+	cache.Show()
+}
+
+func TestCacheWithSlowCleaner(t *testing.T) {
+	storageExpiration := time.Duration(time.Second * 2)
+	cleanupInterval := time.Duration(time.Second * 5)
+	var capacity int64 = 5
+
+	config := StorageConfig{Expiration: storageExpiration, Capacity: capacity, CleanupInterval: cleanupInterval}
+	cache := New(config)
+
+	cache.Set("key1", []byte("ABCDEFG"))
+
+	<-time.After(time.Second * 3)
+
+	// Also when the cleanup Interval is higher than the storage expiration, the Get function always checks if the value is not expired.
+	value, hit := cache.Get("key1")
+	if value != nil && hit != false {
+		t.Errorf("Background cleaner DID NOT remove expired nodes.")
+	}
+	cache.Show()
+}
