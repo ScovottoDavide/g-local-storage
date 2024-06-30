@@ -217,7 +217,7 @@ func (local_storage *InternalLocalStorage) evict() {
 }
 
 func (local_storage *InternalLocalStorage) updateHead(newHead *node) {
-	if local_storage.head == local_storage.tail {
+	if local_storage.head == local_storage.tail || newHead == local_storage.head {
 		return
 	}
 	prev_ := newHead.prev

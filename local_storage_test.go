@@ -120,6 +120,24 @@ func TestCacheClear(t *testing.T) {
 	}
 }
 
+func TestCacheGet(t *testing.T) {
+	storageExpiration := time.Duration(time.Hour * 24)
+	var capacity int64 = 5
+
+	config := StorageConfig{Expiration: storageExpiration, Capacity: capacity}
+	cache := New(config)
+
+	cache.Set("key1", []byte("1abcdefg"), -1)
+	cache.Set("key2", []byte("2abcdefg"), -1)
+	cache.Set("key3", []byte("3abcdefg"), -1)
+
+	// get head
+	cacheItem, hit := cache.Get("key3")
+	if cacheItem == nil && hit == false {
+		t.Errorf("Cannot GET key3 from cache.")
+	}
+}
+
 func TestCacheExpiration(t *testing.T) {
 	// set a low cache expiration time
 	storageExpiration := time.Duration(time.Second * 2)
