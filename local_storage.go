@@ -97,12 +97,17 @@ func stopCleaner(c *LocalStorage) {
 	c.cleaner.stop <- true
 }
 
-func (local_storage *InternalLocalStorage) Set(key string, value []byte) (updated bool) {
+func (local_storage *InternalLocalStorage) Set(key string, value []byte, itemExpiration time.Duration) (updated bool) {
 	local_storage.lock.Lock()
 	defer local_storage.lock.Unlock()
 
 	var expiration *time.Time
-	if local_storage.defaultConfigs.Expiration > 0 {
+	if itemExpiration > 0 {
+		tmp := time.Now().Add(itemExpiration)
+		expiration = &tmp
+	} else if itemExpiration == 0 {
+		expiration = nil
+	} else if local_storage.defaultConfigs.Expiration > 0 && itemExpiration == -1 {
 		tmp := time.Now().Add(local_storage.defaultConfigs.Expiration)
 		expiration = &tmp
 	} else {

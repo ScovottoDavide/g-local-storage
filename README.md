@@ -19,7 +19,7 @@ If the `CleanupInterval` is set to `0`, the `BackgroundCleaner` goroutine will n
 - LocalStorage Struct: Represents the local cache with methods for setting, getting, deleting, clearing, and displaying cache contents.
 - Node Struct: Represents a node in the cache with key, value, expiration time, and pointers to the next and previous nodes.
 - New Function: Initializes a new local cache with the given configuration.
-- Set Method: Inserts a key-value pair into the cache, updating the expiration time and handling eviction if necessary.
+- Set Method: Inserts a key-value pair into the cache, updating the expiration time and handling eviction if necessary. If a `-1 itemExpiration` is passed the cache item follows the default expiration; if a `0 itemExpiration` is passed the cache item never expires; if `> 0 itemExpiration` is passed the cache item will its own default expiration.  
 - Get Method: Retrieves a value from the cache based on the given key, updating its access time.
 - Delete Method: Removes a key-value pair from the cache.
 - Clear Method: Clears all entries in the cache.
