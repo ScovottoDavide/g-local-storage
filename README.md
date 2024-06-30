@@ -41,7 +41,7 @@ import (
 
 func main() {
     config := glocalstorage.StorageConfig{
-        Expiration: 24 * time.Hour,
+        Expiration: 24 * time.Hour, // if set to 0, items cache will never expire
         Capacity:   100,
         CleanupInterval: 1 * time.Hour, // Cleanup runs in the background every hour
     }
