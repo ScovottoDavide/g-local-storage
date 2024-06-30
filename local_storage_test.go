@@ -23,7 +23,6 @@ func TestLocalStorageSet(t *testing.T) {
 	}
 
 	cache.Set("key1", []byte("1abcdefghilm"))
-	cache.Show()
 	if cache.head.key != "key1" {
 		t.Errorf("Head key is supposed to be key1, instead got %s\n", cache.head.key)
 	}
@@ -32,7 +31,6 @@ func TestLocalStorageSet(t *testing.T) {
 	}
 
 	cache.Set("key4", []byte("4abcdefghilm"))
-	cache.Show()
 	if cache.head.key != "key4" {
 		t.Errorf("Head key is supposed to be key1, instead got %s\n", cache.head.key)
 	}
@@ -74,8 +72,6 @@ func TestLocalStorageLRU(t *testing.T) {
 	if curSize != 5 {
 		t.Errorf("curSize should be 5, instead got %d\n", curSize)
 	}
-
-	cache.Show()
 }
 
 func TestCacheDelete(t *testing.T) {
@@ -102,8 +98,6 @@ func TestCacheDelete(t *testing.T) {
 	if curSize != 3 {
 		t.Errorf("curSize should be 3, instead got %d\n", curSize)
 	}
-
-	cache.Show()
 }
 
 func TestCacheClear(t *testing.T) {
@@ -124,7 +118,6 @@ func TestCacheClear(t *testing.T) {
 	if curSize != 0 {
 		t.Errorf("curSize should be 0, instead got %d\n", curSize)
 	}
-	cache.Show()
 }
 
 func TestCacheExpiration(t *testing.T) {
@@ -142,11 +135,10 @@ func TestCacheExpiration(t *testing.T) {
 	time.Sleep(time.Second * 5)
 
 	// Try to GET key from cache. It should remove the expired key
-	value, hit := cache.Get("key1")
-	if value != nil && hit != false {
+	cacheItem, hit := cache.Get("key1")
+	if cacheItem != nil && hit != false {
 		t.Errorf("Cache did not evict key key1.")
 	}
-	cache.Show()
 }
 
 func TestCacheWithCleaner(t *testing.T) {
@@ -161,11 +153,10 @@ func TestCacheWithCleaner(t *testing.T) {
 
 	<-time.After(time.Second * 3)
 
-	value, hit := cache.Get("key1")
-	if value != nil && hit != false {
+	cacheItem, hit := cache.Get("key1")
+	if cacheItem != nil && hit != false {
 		t.Errorf("Background cleaner DID NOT remove expired nodes.")
 	}
-	cache.Show()
 }
 
 func TestCacheWithSlowCleaner(t *testing.T) {
@@ -181,9 +172,31 @@ func TestCacheWithSlowCleaner(t *testing.T) {
 	<-time.After(time.Second * 3)
 
 	// Also when the cleanup Interval is higher than the storage expiration, the Get function always checks if the value is not expired.
-	value, hit := cache.Get("key1")
-	if value != nil && hit != false {
+	cacheItem, hit := cache.Get("key1")
+	if cacheItem != nil && hit != false {
 		t.Errorf("Background cleaner DID NOT remove expired nodes.")
 	}
-	cache.Show()
+}
+
+func TestCacheWithNoExpiration(t *testing.T) {
+	cleanupInterval := time.Duration(time.Second * 5)
+	var capacity int64 = 5
+
+	config := StorageConfig{Expiration: 0, Capacity: capacity, CleanupInterval: cleanupInterval}
+	cache := New(config)
+
+	cache.Set("key1", []byte("ABCDEFG"))
+	cacheItem, hit := cache.Get("key1")
+	if cacheItem == nil && hit == false {
+		t.Errorf("Node with key1 is not in cache. ERROR")
+	} else {
+		if cacheItem.expiration != nil {
+			t.Errorf("Node should NEVER EXPIRE. ERROR")
+		}
+	}
+
+	cache.CleanUpExpired()
+	if cache.size != 1 {
+		t.Errorf("ERROR. Removed non expired key1")
+	}
 }

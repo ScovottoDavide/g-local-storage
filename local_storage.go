@@ -15,13 +15,18 @@ type backgroundCleaner struct {
 type node struct {
 	key        string
 	value      []byte
-	expiration time.Time
+	expiration *time.Time
 	next       *node
 	prev       *node
 }
 
+type CacheItem struct {
+	value      []byte
+	expiration *time.Time
+}
+
 type StorageConfig struct {
-	Expiration      time.Duration
+	Expiration      time.Duration // if set = 0 items will never expire
 	Capacity        int64
 	CleanupInterval time.Duration // if set > 0 will run a background storage cleaner
 }
@@ -53,11 +58,12 @@ func New(config StorageConfig) *LocalStorage {
 
 	cleanupInterval := config.CleanupInterval
 
-	if cleanupInterval > 0 {
+	if cleanupInterval > 0 && config.Expiration > 0 { // run background cleaner iff nodes can actually expire
 		runCleaner(intLocalStorage, cleanupInterval)
 		runtime.SetFinalizer(localStorage, stopCleaner)
+	} else {
+		fmt.Println("Background cleaner has NOT been SET")
 	}
-
 	return localStorage
 }
 
@@ -95,13 +101,21 @@ func (local_storage *InternalLocalStorage) Set(key string, value []byte) (update
 	local_storage.lock.Lock()
 	defer local_storage.lock.Unlock()
 
+	var expiration *time.Time
+	if local_storage.defaultConfigs.Expiration > 0 {
+		tmp := time.Now().Add(local_storage.defaultConfigs.Expiration)
+		expiration = &tmp
+	} else {
+		expiration = nil
+	}
+
 	// key does not exist --> insert
 	if local_storage.kv_storage[key] == nil {
 		if local_storage.head == nil && local_storage.tail == nil { // first element
 			tmp_node := &node{
 				key:        key,
 				value:      value,
-				expiration: time.Now().Add(local_storage.defaultConfigs.Expiration), // results in the time when the value expires: if defaultExpiration = 1day and now is 24Jan --> expiration = 25Jan
+				expiration: expiration, // results in the time when the value expires: if defaultExpiration = 1day and now is 24Jan --> expiration = 25Jan
 				next:       nil,
 				prev:       nil,
 			}
@@ -115,7 +129,7 @@ func (local_storage *InternalLocalStorage) Set(key string, value []byte) (update
 			tmp_node := &node{
 				key:        key,
 				value:      value,
-				expiration: time.Now().Add(local_storage.defaultConfigs.Expiration), // results in the time when the value expires: if defaultExpiration = 1day and now is 24Jan --> expiration = 25Jan
+				expiration: expiration, // results in the time when the value expires: if defaultExpiration = 1day and now is 24Jan --> expiration = 25Jan
 				next:       local_storage.head,
 				prev:       nil,
 			}
@@ -136,7 +150,7 @@ func (local_storage *InternalLocalStorage) Set(key string, value []byte) (update
 	}
 }
 
-func (local_storage *InternalLocalStorage) Get(key string) (value []byte, hit bool) {
+func (local_storage *InternalLocalStorage) Get(key string) (cacheItem *CacheItem, hit bool) {
 	local_storage.lock.Lock()
 	defer local_storage.lock.Unlock()
 
@@ -150,7 +164,7 @@ func (local_storage *InternalLocalStorage) Get(key string) (value []byte, hit bo
 	}
 
 	local_storage.updateHead(newHead)
-	return newHead.value, true
+	return &CacheItem{value: newHead.value, expiration: newHead.expiration}, true
 }
 
 func (local_storage *InternalLocalStorage) Delete(key string) bool {
@@ -198,6 +212,9 @@ func (local_storage *InternalLocalStorage) evict() {
 }
 
 func (local_storage *InternalLocalStorage) updateHead(newHead *node) {
+	if local_storage.head == local_storage.tail {
+		return
+	}
 	prev_ := newHead.prev
 	prev_.next = newHead.next
 	if prev_.next == nil {
@@ -221,7 +238,10 @@ func (local_storage *InternalLocalStorage) CleanUpExpired() {
 }
 
 func (local_storage *InternalLocalStorage) isNodeExpired(node *node) bool {
-	return node.expiration.Before(time.Now())
+	if node.expiration != nil {
+		return node.expiration.Before(time.Now())
+	}
+	return false
 }
 
 func (local_storage *InternalLocalStorage) removeNode(nodeToRemove *node) {
