@@ -190,7 +190,7 @@ func TestCacheWithNoExpiration(t *testing.T) {
 	if cacheItem == nil && hit == false {
 		t.Errorf("Node with key1 is not in cache. ERROR")
 	} else {
-		if cacheItem.expiration != nil {
+		if cacheItem.Expiration != nil {
 			t.Errorf("Node should NEVER EXPIRE. ERROR")
 		}
 	}

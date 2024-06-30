@@ -21,8 +21,8 @@ type node struct {
 }
 
 type CacheItem struct {
-	value      []byte
-	expiration *time.Time
+	Value      []byte
+	Expiration *time.Time
 }
 
 type StorageConfig struct {
@@ -169,7 +169,7 @@ func (local_storage *InternalLocalStorage) Get(key string) (cacheItem *CacheItem
 	}
 
 	local_storage.updateHead(newHead)
-	return &CacheItem{value: newHead.value, expiration: newHead.expiration}, true
+	return &CacheItem{Value: newHead.value, Expiration: newHead.expiration}, true
 }
 
 func (local_storage *InternalLocalStorage) Delete(key string) bool {
